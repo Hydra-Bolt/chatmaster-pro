@@ -14,10 +14,10 @@ import pickle
 from pathlib import Path
 
 import streamlit_authenticator as stauth
-import sqlite3
-# __import__('pysqlite3')
-# import sys
-# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 
 load_dotenv()
@@ -75,8 +75,10 @@ if authentication_status:
         # Button to clear chat history
         if st.button("Clear Chat History"):
             st.session_state.messages = []
+            st.session_state.lang_chat_messages = []
             st.session_state.uploaded_images = {}  # Clear uploaded images as well
             st.success("Chat history cleared!")
+        
         # Image upload widget
         uploaded_files = st.file_uploader(
             "Upload Images", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
@@ -87,11 +89,18 @@ if authentication_status:
         # Checkbox for using documents
         use_documents = st.checkbox("Generate using documents")  # Moved to sidebar
         use_google = st.checkbox("Google Search")  # Moved to sidebar
-        paste_result = paste_image_button(
+        col1, col2 = st.columns(2)
+        with col1:
+            paste_result = paste_image_button(
                 label="Paste Image from Clipboard",
                 background_color="#FF0000",
                 hover_background_color="#380909",
                 errors='raise')
+        with col2:
+            if st.button("Clear Images"):
+                paste_result.image_data = None
+                st.session_state.uploaded_images = {}  # Clear uploaded images as well
+                st.success("Images cleared!")
 
 
     # Initialize session state variables
@@ -144,7 +153,6 @@ if authentication_status:
 
     # Handle image uploads
     if uploaded_files:
-        st.session_state.uploaded_images = {}
         for uploaded_file in uploaded_files:
             img = Image.open(uploaded_file)
             img_base64 = image_to_base64(img)
@@ -157,8 +165,6 @@ if authentication_status:
                     },
                 ]
             }
-            with st.sidebar:
-                st.image(img_base64)
             # Add image to message list but don't submit yet
             st.session_state.uploaded_images[uploaded_file.name] = image_message
 
@@ -176,16 +182,19 @@ if authentication_status:
                     },
                 ]
             }
-            with st.sidebar:
-                st.image(img_base64)
+            
             # Add image to message list but don't submit yet
-            st.session_state.uploaded_images["clipboard.png"] = image_message
-
+            st.session_state.uploaded_images[img_base64[:100]] = image_message
+            paste_result.image_data = None
         except Exception as e:
             st.error(f"Error processing image: {str(e)}")
 
-
-
+    if st.session_state.uploaded_images != {}:
+        with st.spinner("Uploading images..."):
+            with st.sidebar:
+                for image_name, image_message in st.session_state.uploaded_images.items():
+                    st.image(image_message["content"][0]["image_url"]["url"])
+                
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
