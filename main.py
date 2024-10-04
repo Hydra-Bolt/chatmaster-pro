@@ -15,18 +15,12 @@ from pathlib import Path
 
 import streamlit_authenticator as stauth
 import sqlite3
-
-load_dotenv()
-
 __import__('pysqlite3')
 import sys
 sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
-import streamlit as st
-from streamlit import logger
-# import sqlite3
-app_logger = logger.get_logger('SMI_APP')
-app_logger.info(f"sqlite version: {sqlite3.sqlite_version}")
-app_logger.info(f"sys version: {sys.version}")
+
+
+load_dotenv()
 
 
 st.set_page_config(page_title="ChatMaster Pro", page_icon="🤖", layout="wide")
@@ -247,7 +241,7 @@ if authentication_status:
                         response, documents = res
                         st.write(response)
                         st.write(documents)  # Display documents if applicable
-                if use_google:
+                elif use_google:
                     spinner_placeholder.text("Generating response using Google Search...")
                     agent = getGoogleAgent(model=st.session_state["openai_model"])
                     response = agent.invoke({"input": prompt})['output']
