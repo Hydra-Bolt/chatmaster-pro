@@ -9,15 +9,15 @@ from PIL import Image
 from genfromdoc import generateFromEmbeddings
 from genfromgoogle import getGoogleAgent
 from streamlit_paste_button import paste_image_button
-
+from langchain_core.messages import HumanMessage
 import pickle
 from pathlib import Path
 
 import streamlit_authenticator as stauth
 import sqlite3
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+# __import__('pysqlite3')
+# import sys
+# sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 
 load_dotenv()
@@ -34,7 +34,6 @@ with file_path.open("rb") as file:
     hashed_passwords = pickle.load(file)
 
 authenticator = stauth.Authenticate(names, usernames, hashed_passwords, "ptpremier", "ptpremier", cookie_expiry_days=30)
-
 
 name, authentication_status, username = authenticator.login("Login", "main")
 
@@ -101,7 +100,8 @@ if authentication_status:
 
     if "uploaded_images" not in st.session_state:
         st.session_state.uploaded_images = {}
-
+    if "lang_chat_messages" not in st.session_state:
+        st.session_state.lang_chat_messages = []
     # Function to convert image to base64
     def image_to_base64(image: Image.Image) -> str:
         buffered = BytesIO()
@@ -189,7 +189,6 @@ if authentication_status:
     # Display chat messages
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            print(message)
             if isinstance(message["content"], list):
                 for item in message["content"]:
                     if item["type"] == "text":
@@ -224,7 +223,7 @@ if authentication_status:
                 # Use documents if the checkbox is checked
                 if use_documents:
                     spinner_placeholder.text("Attempting to generate response from documents...")
-                    res = generateFromEmbeddings(prompt, st.session_state["openai_model"])
+                    res = generateFromEmbeddings(prompt, st.session_state["openai_model"], st.session_state.lang_chat_messages)
 
                     # If no response from documents, fallback to normal generation
                     if not res:
@@ -244,7 +243,20 @@ if authentication_status:
                 elif use_google:
                     spinner_placeholder.text("Generating response using Google Search...")
                     agent = getGoogleAgent(model=st.session_state["openai_model"])
-                    response = agent.invoke({"input": prompt})['output']
+                    chat_history = []
+                    messages = st.session_state.messages
+                    for i in range(0, len(messages) - 1, 2):  # Loop in steps of 2 to pair (quest, resp)
+                        user_message = messages[i]['content']
+                        assistant_response = messages[i + 1]['content']
+                        chat_history.append(f"User: {user_message}\nAssistant: {assistant_response}")
+                    
+                    # Join the tuples into a single string
+                    formatted_chat_history = "\n".join(chat_history)
+
+                    response = agent.invoke({
+                        "input": prompt, 
+                        "chat_history": formatted_chat_history
+                    })['output']
                     spinner_placeholder.text("Response generated using Google Search.")
                     st.write(response)
                 else:
@@ -257,7 +269,7 @@ if authentication_status:
                     response = st.write_stream(stream)
                 # Append the assistant response to the message list
                 st.session_state.messages.append({"role": "assistant", "content": response})
-
+                st.session_state.lang_chat_messages.extend([HumanMessage(content=prompt), response])
 
                 # Clear the placeholder after generating the response
                 spinner_placeholder.empty()
